@@ -77,6 +77,17 @@ kbd { background: var(--bg3); border-radius: 4px; padding: 1px 5px; font-size: 1
 .tiptap ul[data-type='taskList'] li { display: flex; gap: 8px; }
 .tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted); float: left; height: 0; pointer-events: none; }
 
+/* Toolbar */
+.toolbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 2px; flex-wrap: nowrap; overflow-x: auto; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 6px; margin-bottom: 14px; -webkit-overflow-scrolling: touch; }
+.tb-btn { background: none; border: none; color: var(--text); min-width: 34px; height: 34px; border-radius: 6px; cursor: pointer; font-size: 15px; flex-shrink: 0; }
+.tb-btn:hover { background: var(--bg3); }
+.tb-btn.on { background: var(--bg3); color: var(--accent); }
+.tb-select { background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 6px; height: 34px; font-size: 13px; flex-shrink: 0; }
+.tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+.tiptap mark { background: #f7e06e; color: #191919; border-radius: 2px; padding: 0 2px; }
+.tiptap img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+.tiptap a { color: var(--accent); }
+
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 50; }
 .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; width: min(560px, 92vw); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -98,7 +109,18 @@ kbd { background: var(--bg3); border-radius: 4px; padding: 1px 5px; font-size: 1
 .empty-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
 
 @media (max-width: 768px) {
-  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 10; height: 100vh; }
+  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 10; height: 100dvh; width: 86vw; min-width: 86vw; box-shadow: 4px 0 24px rgba(0,0,0,.5); }
+  .sidebar .btn { font-size: 16px; padding: 12px 10px; }
+  .tree-item { padding: 12px 8px; font-size: 17px; }
+  .tree-actions { display: flex; }
+  .tree-actions button { font-size: 17px; padding: 0 6px; }
+  .sidebar-foot .muted { font-size: 13px; }
   .editor-wrap { padding: 56px 16px 120px; }
-  .page-title { font-size: 28px; }
+  .page-title { font-size: 30px; }
+  .editor-content .tiptap { font-size: 17px; }
+  .tag { font-size: 14px; }
+  .tag-input, .ai-ask input, .search-input, .auth-card input { font-size: 16px; }
+  .toolbar { top: 4px; }
+  .tb-btn { min-width: 40px; height: 40px; font-size: 17px; }
+  .tb-select { height: 40px; font-size: 15px; }
 }
