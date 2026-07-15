@@ -30,7 +30,7 @@ function TreeNode({ page, childrenMap, activeId, onSelect, onCreate, onDelete, d
   )
 }
 
-export default function Sidebar({ pages, activeId, onSelect, onCreate, onDelete, onSearch, onSignOut, email }) {
+export default function Sidebar({ pages, activeId, onSelect, onCreate, onDelete, onSearch, onAskAI, onSignOut, email, theme, onToggleTheme }) {
   const { roots, childrenMap } = useMemo(() => {
     const childrenMap = new Map()
     const roots = []
@@ -49,6 +49,7 @@ export default function Sidebar({ pages, activeId, onSelect, onCreate, onDelete,
         <span className="workspace">📝 Notes</span>
       </div>
       <button className="btn ghost" onClick={onSearch}>🔍 Search <kbd>Ctrl K</kbd></button>
+      <button className="btn ghost" onClick={onAskAI}>✨ Ask AI (all notes)</button>
       <button className="btn ghost" onClick={() => onCreate(null)}>＋ New page</button>
       <div className="tree">
         {roots.map((p) => (
@@ -59,7 +60,12 @@ export default function Sidebar({ pages, activeId, onSelect, onCreate, onDelete,
       </div>
       <div className="sidebar-foot">
         <span className="muted small">{email}</span>
-        <button className="btn link" onClick={onSignOut}>Sign out</button>
+        <span>
+          <button className="btn link" onClick={onToggleTheme} title="Toggle theme">
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button className="btn link" onClick={onSignOut}>Sign out</button>
+        </span>
       </div>
     </aside>
   )

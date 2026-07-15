@@ -8,6 +8,7 @@ const PROMPTS = {
   action_items: 'Extract all action items / to-dos from this note as a checklist. If none, say so.',
   improve: 'Rewrite this note with improved clarity, structure, and grammar. Keep the meaning and voice.',
   ask: 'Answer the question using only the note content. If the note lacks the answer, say so.',
+  ask_all: "Answer the question using the user's notes below (each note starts with '## title'). Mention which note titles you drew from. If the notes lack the answer, say so.",
 }
 
 async function callGemini(userMsg) {
@@ -62,8 +63,8 @@ export default async function handler(req, res) {
   if (!text?.trim()) return res.status(400).json({ error: 'This note is empty.' })
 
   const userMsg =
-    `${PROMPTS[action]}\n\n<note title="${title}">\n${text.slice(0, 50000)}\n</note>` +
-    (action === 'ask' ? `\n\nQuestion: ${question}` : '')
+    `${PROMPTS[action]}\n\n<note title="${title}">\n${text.slice(0, action === 'ask_all' ? 200000 : 50000)}\n</note>` +
+    (action === 'ask' || action === 'ask_all' ? `\n\nQuestion: ${question}` : '')
 
   try {
     let result

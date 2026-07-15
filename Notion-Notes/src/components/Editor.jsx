@@ -87,6 +87,19 @@ function Toolbar({ editor, onAttach, uploading }) {
       <button className="tb-btn" onClick={onAttach} disabled={uploading} title="Attach image or file">
         {uploading ? '…' : '📎'}
       </button>
+      <button
+        className="tb-btn"
+        title="Insert current date & time"
+        onClick={() =>
+          editor.chain().focus().insertContent(
+            new Date().toLocaleString(undefined, {
+              day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+            }) + ' '
+          ).run()
+        }
+      >
+        📅
+      </button>
     </div>
   )
 }
@@ -97,6 +110,7 @@ export default function Editor({ pageId, onMetaChange, onOpenAI }) {
   const [tagInput, setTagInput] = useState('')
   const [status, setStatus] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [times, setTimes] = useState({ created_at: null, updated_at: null })
   const saveTimer = useRef(null)
   const loaded = useRef(false)
   const fileInput = useRef(null)
@@ -124,13 +138,14 @@ export default function Editor({ pageId, onMetaChange, onOpenAI }) {
     if (!editor) return
     supabase
       .from('pages')
-      .select('title, content, tags')
+      .select('title, content, tags, created_at, updated_at')
       .eq('id', pageId)
       .single()
       .then(({ data }) => {
         if (!data) return
         setTitle(data.title || '')
         setTags(data.tags || [])
+        setTimes({ created_at: data.created_at, updated_at: data.updated_at })
         editor.commands.setContent(data.content || '')
         loaded.current = true
       })
@@ -145,7 +160,10 @@ export default function Editor({ pageId, onMetaChange, onOpenAI }) {
         .update({ ...patch, updated_at: new Date().toISOString() })
         .eq('id', pageId)
       setStatus(error ? 'Save failed' : 'Saved')
-      if (!error) setTimeout(() => setStatus(''), 1500)
+      if (!error) {
+        setTimes((t) => ({ ...t, updated_at: new Date().toISOString() }))
+        setTimeout(() => setStatus(''), 1500)
+      }
     }, 600)
   }
 
@@ -200,10 +218,29 @@ export default function Editor({ pageId, onMetaChange, onOpenAI }) {
     setUploading(false)
   }
 
+  const fmt = (d) =>
+    d &&
+    new Date(d).toLocaleString(undefined, {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    })
+
+  const exportWord = () => {
+    if (!editor) return
+    const html = `<html><head><meta charset="utf-8"><title>${title}</title></head><body><h1>${title}</h1>${editor.getHTML()}</body></html>`
+    const blob = new Blob(['﻿' + html], { type: 'application/msword' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${title || 'note'}.doc`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   return (
     <div className="editor-wrap">
       <div className="editor-topbar">
         <span className="save-status">{status}</span>
+        <button className="btn export" onClick={exportWord} title="Download as Word">⬇ Word</button>
+        <button className="btn export" onClick={() => window.print()} title="Print / Save as PDF">⬇ PDF</button>
         <button className="btn ai" onClick={onOpenAI}>✨ AI</button>
       </div>
       <input
@@ -212,6 +249,11 @@ export default function Editor({ pageId, onMetaChange, onOpenAI }) {
         placeholder="Untitled"
         onChange={(e) => changeTitle(e.target.value)}
       />
+      {times.created_at && (
+        <div className="muted small time-row">
+          Created {fmt(times.created_at)} · Last edited {fmt(times.updated_at)}
+        </div>
+      )}
       <div className="tags-row">
         {tags.map((t) => (
           <span key={t} className="tag">

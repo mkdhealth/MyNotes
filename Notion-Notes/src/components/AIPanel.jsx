@@ -5,23 +5,42 @@ const ACTIONS = [
   { id: 'summarize', label: '📄 Summarize' },
   { id: 'insights', label: '💡 Key insights' },
   { id: 'action_items', label: '✅ Action items' },
-  { id: 'improve', label: '✍️ Improve writing' },
+  { id: 'improve', label: '✍️ Improve writing', pageOnly: true },
 ]
 
-export default function AIPanel({ pageId, onClose }) {
+export default function AIPanel({ pageId, scope = 'page', onClose }) {
   const [output, setOutput] = useState('')
   const [busy, setBusy] = useState(false)
   const [question, setQuestion] = useState('')
+  const all = scope === 'all'
 
   const run = async (action, q = '') => {
     setBusy(true)
     setOutput('')
     try {
-      const { data: page } = await supabase
-        .from('pages')
-        .select('title, content_text')
-        .eq('id', pageId)
-        .single()
+      let title = ''
+      let text = ''
+      if (all) {
+        const { data } = await supabase
+          .from('pages')
+          .select('title, content_text')
+          .limit(300)
+        title = 'All notes'
+        text = (data || [])
+          .filter((p) => p.content_text?.trim())
+          .map((p) => `## ${p.title}\n${p.content_text}`)
+          .join('\n\n')
+          .slice(0, 200000)
+        if (action === 'ask') action = 'ask_all'
+      } else {
+        const { data: page } = await supabase
+          .from('pages')
+          .select('title, content_text')
+          .eq('id', pageId)
+          .single()
+        title = page?.title || ''
+        text = page?.content_text || ''
+      }
       const { data: sess } = await supabase.auth.getSession()
       const res = await fetch('/api/ai', {
         method: 'POST',
@@ -29,12 +48,7 @@ export default function AIPanel({ pageId, onClose }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${sess.session.access_token}`,
         },
-        body: JSON.stringify({
-          action,
-          question: q,
-          title: page?.title || '',
-          text: page?.content_text || '',
-        }),
+        body: JSON.stringify({ action, question: q, title, text }),
       })
       const json = await res.json()
       setOutput(res.ok ? json.result : json.error || 'Something went wrong.')
@@ -48,11 +62,11 @@ export default function AIPanel({ pageId, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal ai-panel" onClick={(e) => e.stopPropagation()}>
         <div className="ai-head">
-          <strong>✨ AI assistant</strong>
+          <strong>✨ AI — {all ? 'all notes' : 'this note'}</strong>
           <button className="btn link" onClick={onClose}>Close</button>
         </div>
         <div className="ai-actions">
-          {ACTIONS.map((a) => (
+          {ACTIONS.filter((a) => !(all && a.pageOnly)).map((a) => (
             <button key={a.id} className="btn ghost" disabled={busy} onClick={() => run(a.id)}>
               {a.label}
             </button>
@@ -60,7 +74,7 @@ export default function AIPanel({ pageId, onClose }) {
         </div>
         <div className="ai-ask">
           <input
-            placeholder="Ask anything about this note…"
+            placeholder={all ? 'Ask anything across all your notes…' : 'Ask anything about this note…'}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && question.trim() && run('ask', question)}

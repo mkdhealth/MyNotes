@@ -13,7 +13,14 @@ export default function App() {
   const [activeId, setActiveId] = useState(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
+  const [aiScope, setAiScope] = useState('page')
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('theme', theme)
+  }, [theme])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -77,6 +84,11 @@ export default function App() {
     setPages((p) => p.map((pg) => (pg.id === id ? { ...pg, ...patch } : pg)))
   }
 
+  const openAI = (scope) => {
+    setAiScope(scope)
+    setAiOpen(true)
+  }
+
   if (loading) return <div className="center-screen">Loading…</div>
   if (!session) return <Auth />
 
@@ -91,8 +103,11 @@ export default function App() {
           onCreate={createPage}
           onDelete={deletePage}
           onSearch={() => setSearchOpen(true)}
+          onAskAI={() => openAI('all')}
           onSignOut={() => supabase.auth.signOut()}
           email={session.user.email}
+          theme={theme}
+          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         />
       )}
       <main className="main">
@@ -101,7 +116,7 @@ export default function App() {
             key={activeId}
             pageId={activeId}
             onMetaChange={(patch) => updatePageMeta(activeId, patch)}
-            onOpenAI={() => setAiOpen(true)}
+            onOpenAI={() => openAI('page')}
           />
         ) : (
           <div className="empty-state">
@@ -117,8 +132,8 @@ export default function App() {
           onSelect={(id) => { setActiveId(id); setSearchOpen(false) }}
         />
       )}
-      {aiOpen && activeId && (
-        <AIPanel pageId={activeId} onClose={() => setAiOpen(false)} />
+      {aiOpen && (aiScope === 'all' || activeId) && (
+        <AIPanel pageId={activeId} scope={aiScope} onClose={() => setAiOpen(false)} />
       )}
     </div>
   )
