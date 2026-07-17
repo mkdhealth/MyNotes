@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar'
 import Editor from './components/Editor'
 import SearchModal from './components/SearchModal'
 import AIPanel from './components/AIPanel'
+import { startRecording, transcribe, transcriptToHTML, summaryToHTML } from './stenoji'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -90,6 +91,47 @@ export default function App() {
   }
 
   const [pendingTemplate, setPendingTemplate] = useState(null)
+  const [meetState, setMeetState] = useState('idle')
+  const meetRef = useState(() => ({ current: null }))[0]
+
+  const newPageWithHTML = async (title, tag, html) => {
+    const { data, error } = await supabase
+      .from('pages')
+      .insert({ title, parent_id: null, content: null, content_text: '', tags: [tag], user_id: session.user.id })
+      .select('id, title, parent_id, tags, updated_at')
+      .single()
+    if (!error && data) {
+      setPages((p) => [...p, data])
+      setPendingTemplate(html)
+      setActiveId(data.id)
+    }
+  }
+
+  const toggleMeeting = async () => {
+    if (meetState === 'processing') return
+    if (meetState === 'rec') {
+      const blob = await meetRef.current.stop()
+      setMeetState('processing')
+      try {
+        const t = await transcribe(blob, { summarize: true })
+        const title = 'Meeting – ' + new Date().toLocaleString(undefined, {
+          day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+        })
+        const html = `${summaryToHTML(t)}<h2>Transcript</h2>${transcriptToHTML(t)}`
+        await newPageWithHTML(title, 'meeting', html)
+      } catch (err) {
+        alert('Meeting transcription failed: ' + err.message)
+      }
+      setMeetState('idle')
+      return
+    }
+    try {
+      meetRef.current = await startRecording()
+      setMeetState('rec')
+    } catch (e) {
+      alert('Microphone unavailable: ' + e.message)
+    }
+  }
 
   const createTemplatePage = async (name, html) => {
     const title = name.charAt(0).toUpperCase() + name.slice(1)
@@ -128,6 +170,8 @@ export default function App() {
           onDelete={deletePage}
           onSearch={() => setSearchOpen(true)}
           onAskAI={() => openAI('all')}
+          onRecordMeeting={toggleMeeting}
+          meetState={meetState}
           onSignOut={() => supabase.auth.signOut()}
           email={session.user.email}
           theme={theme}
