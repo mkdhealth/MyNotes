@@ -9,6 +9,8 @@ const PROMPTS = {
   improve: 'Rewrite this note with improved clarity, structure, and grammar. Keep the meaning and voice.',
   ask: 'Answer the question using only the note content. If the note lacks the answer, say so.',
   ask_all: "Answer the question using the user's notes below (each note starts with '## title'). Mention which note titles you drew from. If the notes lack the answer, say so.",
+  template:
+    'Create a reusable note-taking template for the purpose described. Return ONLY raw HTML — no markdown, no code fences, no explanations. Allowed tags: h1, h2, h3, p, ul, ol, li, blockquote, strong, em, and checklists written exactly as <ul data-type="taskList"><li data-type="taskItem" data-checked="false">item</li></ul>. Include clear section headings and short placeholder hints in the paragraphs.',
 }
 
 async function callGemini(userMsg) {
@@ -60,11 +62,16 @@ export default async function handler(req, res) {
 
   const { action, title, text, question } = req.body || {}
   if (!PROMPTS[action]) return res.status(400).json({ error: 'Unknown action' })
-  if (!text?.trim()) return res.status(400).json({ error: 'This note is empty.' })
+  if (action === 'template' && !question?.trim())
+    return res.status(400).json({ error: 'Describe what the template is for.' })
+  if (action !== 'template' && !text?.trim())
+    return res.status(400).json({ error: 'This note is empty.' })
 
   const userMsg =
-    `${PROMPTS[action]}\n\n<note title="${title}">\n${text.slice(0, action === 'ask_all' ? 200000 : 50000)}\n</note>` +
-    (action === 'ask' || action === 'ask_all' ? `\n\nQuestion: ${question}` : '')
+    action === 'template'
+      ? `${PROMPTS.template}\n\nTemplate purpose: ${question}`
+      : `${PROMPTS[action]}\n\n<note title="${title}">\n${text.slice(0, action === 'ask_all' ? 200000 : 50000)}\n</note>` +
+        (action === 'ask' || action === 'ask_all' ? `\n\nQuestion: ${question}` : '')
 
   try {
     let result
