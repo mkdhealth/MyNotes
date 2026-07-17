@@ -89,6 +89,30 @@ export default function App() {
     setAiOpen(true)
   }
 
+  const [pendingTemplate, setPendingTemplate] = useState(null)
+
+  const createTemplatePage = async (name, html) => {
+    const title = name.charAt(0).toUpperCase() + name.slice(1)
+    const { data, error } = await supabase
+      .from('pages')
+      .insert({
+        title,
+        parent_id: null,
+        content: null,
+        content_text: '',
+        tags: ['template'],
+        user_id: session.user.id,
+      })
+      .select('id, title, parent_id, tags, updated_at')
+      .single()
+    if (!error && data) {
+      setPages((p) => [...p, data])
+      setPendingTemplate(html)
+      setActiveId(data.id)
+      setAiOpen(false)
+    }
+  }
+
   if (loading) return <div className="center-screen">Loading…</div>
   if (!session) return <Auth />
 
@@ -115,6 +139,8 @@ export default function App() {
           <Editor
             key={activeId}
             pageId={activeId}
+            templateHTML={pendingTemplate}
+            onTemplateApplied={() => setPendingTemplate(null)}
             onMetaChange={(patch) => updatePageMeta(activeId, patch)}
             onOpenAI={() => openAI('page')}
           />
@@ -133,7 +159,12 @@ export default function App() {
         />
       )}
       {aiOpen && (aiScope === 'all' || activeId) && (
-        <AIPanel pageId={activeId} scope={aiScope} onClose={() => setAiOpen(false)} />
+        <AIPanel
+          pageId={activeId}
+          scope={aiScope}
+          onClose={() => setAiOpen(false)}
+          onCreateTemplate={createTemplatePage}
+        />
       )}
     </div>
   )
