@@ -8,11 +8,36 @@ const ACTIONS = [
   { id: 'improve', label: '✍️ Improve writing', pageOnly: true },
 ]
 
-export default function AIPanel({ pageId, scope = 'page', onClose }) {
+export default function AIPanel({ pageId, scope = 'page', onClose, onCreateTemplate }) {
   const [output, setOutput] = useState('')
   const [busy, setBusy] = useState(false)
   const [question, setQuestion] = useState('')
+  const [tpl, setTpl] = useState('')
   const all = scope === 'all'
+
+  const runTemplate = async () => {
+    if (!tpl.trim()) return
+    setBusy(true)
+    setOutput('')
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sess.session.access_token}`,
+        },
+        body: JSON.stringify({ action: 'template', question: tpl, title: '', text: '' }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Template generation failed')
+      const html = json.result.replace(/```html?/g, '').replace(/```/g, '').trim()
+      onCreateTemplate(tpl.trim(), html)
+    } catch (e) {
+      setOutput('Request failed: ' + e.message)
+      setBusy(false)
+    }
+  }
 
   const run = async (action, q = '') => {
     setBusy(true)
@@ -83,8 +108,19 @@ export default function AIPanel({ pageId, scope = 'page', onClose }) {
             Ask
           </button>
         </div>
+        <div className="ai-ask">
+          <input
+            placeholder="Create a template: e.g. meeting notes, daily journal…"
+            value={tpl}
+            onChange={(e) => setTpl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && runTemplate()}
+          />
+          <button className="btn primary" disabled={busy || !tpl.trim()} onClick={runTemplate}>
+            📋 Create
+          </button>
+        </div>
         <div className="ai-output">
-          {busy ? 'Thinking…' : output || 'Pick an action or ask a question.'}
+          {busy ? 'Thinking…' : output || 'Pick an action, ask a question, or create a template.'}
         </div>
       </div>
     </div>
