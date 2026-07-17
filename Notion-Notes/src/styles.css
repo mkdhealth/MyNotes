@@ -117,7 +117,7 @@ kbd { background: var(--bg3); border-radius: 4px; padding: 1px 5px; font-size: 1
 
 /* Extras */
 .time-row { margin: 2px 0 10px; }
-.tb-btn.recording { background: #c0392b; color: #fff; animation: recpulse 1.2s ease-in-out infinite; }
+.tb-btn.recording, .btn.recording { background: #c0392b; color: #fff; animation: recpulse 1.2s ease-in-out infinite; }
 @keyframes recpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 .btn.export { border: 1px solid var(--border); font-size: 13px; }
 
