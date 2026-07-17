@@ -32,7 +32,7 @@ const FontSize = Extension.create({
   },
 })
 
-function Toolbar({ editor, onAttach, uploading }) {
+function Toolbar({ editor, onAttach, uploading, onMic, rec }) {
   if (!editor) return null
   const b = (active) => `tb-btn ${active ? 'on' : ''}`
 
@@ -100,6 +100,14 @@ function Toolbar({ editor, onAttach, uploading }) {
       >
         📅
       </button>
+      <button
+        className={`tb-btn ${rec === 'rec' ? 'recording' : ''}`}
+        onClick={onMic}
+        disabled={rec === 'processing'}
+        title={rec === 'rec' ? 'Stop & transcribe' : 'Dictate (via Stenoji)'}
+      >
+        {rec === 'rec' ? '⏹' : rec === 'processing' ? '⏳' : '🎤'}
+      </button>
     </div>
   )
 }
@@ -111,6 +119,8 @@ export default function Editor({ pageId, onMetaChange, onOpenAI, templateHTML, o
   const [status, setStatus] = useState('')
   const [uploading, setUploading] = useState(false)
   const [times, setTimes] = useState({ created_at: null, updated_at: null })
+  const [rec, setRec] = useState('idle')
+  const recRef = useRef(null)
   const saveTimer = useRef(null)
   const loaded = useRef(false)
   const fileInput = useRef(null)
@@ -225,6 +235,63 @@ export default function Editor({ pageId, onMetaChange, onOpenAI, templateHTML, o
     setUploading(false)
   }
 
+  const STENOJI = 'https://voicescribe-qn2t.onrender.com'
+
+  const toggleDictate = async () => {
+    if (rec === 'processing') return
+    if (rec === 'rec') {
+      recRef.current?.stop()
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mr = new MediaRecorder(stream)
+      const chunks = []
+      mr.ondataavailable = (e) => e.data.size && chunks.push(e.data)
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        setRec('processing')
+        try {
+          const blob = new Blob(chunks, { type: mr.mimeType })
+          const up = await fetch(`${STENOJI}/api/upload`, { method: 'POST', body: blob }).then((r) => r.json())
+          if (!up.upload_url) throw new Error(up.error || 'Upload failed')
+          const job = await fetch(`${STENOJI}/api/transcript`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              audio_url: up.upload_url,
+              speech_models: ['universal-3-pro', 'universal-2'],
+              speaker_labels: true,
+              language_detection: true,
+            }),
+          }).then((r) => r.json())
+          if (!job.id) throw new Error(job.error || 'Transcription request failed')
+          let t
+          for (;;) {
+            await new Promise((r) => setTimeout(r, 3000))
+            t = await fetch(`${STENOJI}/api/transcript/${job.id}`).then((r) => r.json())
+            if (t.status === 'completed') break
+            if (t.status === 'error') throw new Error(t.error || 'Transcription failed')
+          }
+          const speakers = new Set((t.utterances || []).map((u) => u.speaker))
+          const html =
+            speakers.size > 1
+              ? t.utterances.map((u) => `<p><strong>Speaker ${u.speaker}:</strong> ${u.text}</p>`).join('')
+              : `<p>${t.text || ''}</p>`
+          editor?.chain().focus().insertContent(html).run()
+        } catch (err) {
+          alert('Dictation failed: ' + err.message + '\n(Is CORS enabled on stenoji.com for this app?)')
+        }
+        setRec('idle')
+      }
+      mr.start()
+      recRef.current = mr
+      setRec('rec')
+    } catch (e) {
+      alert('Microphone unavailable: ' + e.message)
+    }
+  }
+
   const fmt = (d) =>
     d &&
     new Date(d).toLocaleString(undefined, {
@@ -276,7 +343,7 @@ export default function Editor({ pageId, onMetaChange, onOpenAI, templateHTML, o
           onBlur={addTag}
         />
       </div>
-      <Toolbar editor={editor} uploading={uploading} onAttach={() => fileInput.current?.click()} />
+      <Toolbar editor={editor} uploading={uploading} onAttach={() => fileInput.current?.click()} onMic={toggleDictate} rec={rec} />
       <input ref={fileInput} type="file" hidden onChange={handleFile}
         accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" />
       <EditorContent editor={editor} className="editor-content" />
