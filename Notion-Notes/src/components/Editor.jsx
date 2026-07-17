@@ -104,7 +104,7 @@ function Toolbar({ editor, onAttach, uploading }) {
   )
 }
 
-export default function Editor({ pageId, onMetaChange, onOpenAI }) {
+export default function Editor({ pageId, onMetaChange, onOpenAI, templateHTML, onTemplateApplied }) {
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState([])
   const [tagInput, setTagInput] = useState('')
@@ -146,8 +146,15 @@ export default function Editor({ pageId, onMetaChange, onOpenAI }) {
         setTitle(data.title || '')
         setTags(data.tags || [])
         setTimes({ created_at: data.created_at, updated_at: data.updated_at })
-        editor.commands.setContent(data.content || '')
-        loaded.current = true
+        if (templateHTML) {
+          editor.commands.setContent(templateHTML)
+          loaded.current = true
+          scheduleSave({ content: editor.getJSON(), content_text: editor.getText() })
+          onTemplateApplied?.()
+        } else {
+          editor.commands.setContent(data.content || '')
+          loaded.current = true
+        }
       })
   }, [editor, pageId])
 
