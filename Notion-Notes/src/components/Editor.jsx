@@ -11,6 +11,7 @@ import Link from '@tiptap/extension-link'
 import TextStyle from '@tiptap/extension-text-style'
 import { Extension } from '@tiptap/core'
 import { supabase } from '../supabase'
+import { startRecording, transcribe, transcriptToHTML } from '../stenoji'
 
 // Custom font-size support on top of TextStyle
 const FontSize = Extension.create({
@@ -235,57 +236,25 @@ export default function Editor({ pageId, onMetaChange, onOpenAI, templateHTML, o
     setUploading(false)
   }
 
-  const STENOJI = 'https://voicescribe-qn2t.onrender.com'
-
   const toggleDictate = async () => {
     if (rec === 'processing') return
     if (rec === 'rec') {
-      recRef.current?.stop()
+      const blob = await recRef.current.stop()
+      setRec('processing')
+      setStatus('Transcribing…')
+      try {
+        const t = await transcribe(blob, {}, setStatus)
+        editor?.chain().focus().insertContent(transcriptToHTML(t)).run()
+        setStatus('')
+      } catch (err) {
+        setStatus('')
+        alert('Dictation failed: ' + err.message)
+      }
+      setRec('idle')
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mr = new MediaRecorder(stream)
-      const chunks = []
-      mr.ondataavailable = (e) => e.data.size && chunks.push(e.data)
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop())
-        setRec('processing')
-        try {
-          const blob = new Blob(chunks, { type: mr.mimeType })
-          const up = await fetch(`${STENOJI}/api/upload`, { method: 'POST', body: blob }).then((r) => r.json())
-          if (!up.upload_url) throw new Error(up.error || 'Upload failed')
-          const job = await fetch(`${STENOJI}/api/transcript`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              audio_url: up.upload_url,
-              speech_models: ['universal-3-pro', 'universal-2'],
-              speaker_labels: true,
-              language_detection: true,
-            }),
-          }).then((r) => r.json())
-          if (!job.id) throw new Error(job.error || 'Transcription request failed')
-          let t
-          for (;;) {
-            await new Promise((r) => setTimeout(r, 3000))
-            t = await fetch(`${STENOJI}/api/transcript/${job.id}`).then((r) => r.json())
-            if (t.status === 'completed') break
-            if (t.status === 'error') throw new Error(t.error || 'Transcription failed')
-          }
-          const speakers = new Set((t.utterances || []).map((u) => u.speaker))
-          const html =
-            speakers.size > 1
-              ? t.utterances.map((u) => `<p><strong>Speaker ${u.speaker}:</strong> ${u.text}</p>`).join('')
-              : `<p>${t.text || ''}</p>`
-          editor?.chain().focus().insertContent(html).run()
-        } catch (err) {
-          alert('Dictation failed: ' + err.message + '\n(Is CORS enabled on stenoji.com for this app?)')
-        }
-        setRec('idle')
-      }
-      mr.start()
-      recRef.current = mr
+      recRef.current = await startRecording()
       setRec('rec')
     } catch (e) {
       alert('Microphone unavailable: ' + e.message)
