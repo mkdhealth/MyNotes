@@ -1,5 +1,6 @@
-// Talks to Stenoji through our own /api/dictate proxy so the secret key
-// stays server-side. Used by both quick dictation and meeting recording.
+// Records audio, uploads it to Supabase Storage (browser -> Supabase, no size limit),
+// then asks Stenoji (via our /api/dictate proxy) to transcribe it. The secret key
+// stays server-side in the proxy. Used by both dictation and meeting recording.
 import { supabase } from './supabase'
 
 async function authHeader() {
@@ -7,7 +8,7 @@ async function authHeader() {
   return { Authorization: `Bearer ${data.session.access_token}` }
 }
 
-// Records mic audio; returns a MediaRecorder-based controller.
+// Starts mic recording; returns a controller whose stop() resolves to an audio Blob.
 export async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
   const mr = new MediaRecorder(stream)
@@ -26,20 +27,28 @@ export async function startRecording() {
   }
 }
 
-// Uploads audio to Stenoji, runs transcription, polls until done. Returns the transcript object.
 export async function transcribe(blob, { summarize = false } = {}, onStatus) {
   const ah = await authHeader()
-  onStatus?.('Uploading audio…')
-  const up = await fetch('/api/dictate?step=upload', { method: 'POST', headers: ah, body: blob }).then((r) => r.json())
-  if (!up.upload_url) throw new Error(up.error || 'Upload failed')
 
-  onStatus?.('Transcribing…')
+  onStatus && onStatus('Uploading audio...')
+  const { data: u } = await supabase.auth.getUser()
+  const ext = (blob.type.split('/')[1] || 'webm').split(';')[0]
+  const path = `${u.user.id}/audio-${Date.now()}.${ext}`
+  const { error: upErr } = await supabase.storage.from('files').upload(path, blob, { contentType: blob.type })
+  if (upErr) throw new Error('Audio upload failed: ' + upErr.message + ' (did you run supabase-storage.sql?)')
+  const audioUrl = supabase.storage.from('files').getPublicUrl(path).data.publicUrl
+
+  onStatus && onStatus('Transcribing...')
   const reqBody = {
-    audio_url: up.upload_url,
+    audio_url: audioUrl,
     speech_models: ['universal-3-pro', 'universal-2'],
     speaker_labels: true,
     language_detection: true,
-    ...(summarize ? { summarization: true, summary_model: 'informative', summary_type: 'bullets' } : {}),
+  }
+  if (summarize) {
+    reqBody.summarization = true
+    reqBody.summary_model = 'informative'
+    reqBody.summary_type = 'bullets'
   }
   const job = await fetch('/api/dictate?step=transcript', {
     method: 'POST',
@@ -53,19 +62,20 @@ export async function transcribe(blob, { summarize = false } = {}, onStatus) {
     const t = await fetch(`/api/dictate?step=poll&id=${job.id}`, { headers: ah }).then((r) => r.json())
     if (t.status === 'completed') return t
     if (t.status === 'error') throw new Error(t.error || 'Transcription failed')
-    onStatus?.(`Transcribing… (${t.status})`)
+    onStatus && onStatus('Transcribing... (' + t.status + ')')
   }
 }
 
 export function transcriptToHTML(t) {
   const speakers = new Set((t.utterances || []).map((u) => u.speaker))
-  return speakers.size > 1
-    ? t.utterances.map((u) => `<p><strong>Speaker ${u.speaker}:</strong> ${u.text}</p>`).join('')
-    : `<p>${t.text || ''}</p>`
+  if (speakers.size > 1) {
+    return t.utterances.map((u) => `<p><strong>Speaker ${u.speaker}:</strong> ${u.text}</p>`).join('')
+  }
+  return `<p>${t.text || ''}</p>`
 }
 
 export function summaryToHTML(t) {
   if (!t.summary) return ''
   const lines = t.summary.split('\n').map((l) => l.trim()).filter(Boolean)
-  return '<h2>Summary</h2>' + lines.map((l) => `<p>${l.replace(/^[-*•]\s*/, '• ')}</p>`).join('')
+  return '<h2>Summary</h2>' + lines.map((l) => `<p>${l.replace(/^[-*]\s*/, '')}</p>`).join('')
 }
